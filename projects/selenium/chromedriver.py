@@ -143,3 +143,5 @@ driver.quit()
 # MAGIC [https://github.com/hubert-dudek/databricks-hubert/blob/main/projects/selenium/chromedriver.py]
 # MAGIC 
 # MAGIC To import that notebook into databricks, go to the folder in your "workplace" -> from the arrow menu, select "URL" -> click "import" -> put [https://raw.githubusercontent.com/hubert-dudek/databricks-hubert/main/projects/selenium/chromedriver.py] as URL.
+# MAGIC 
+# MAGIC ![image](https://raw.githubusercontent.com/hubert-dudek/databricks-hubert/main/projects/selenium/import.png)
