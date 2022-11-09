@@ -56,6 +56,8 @@ display(dbutils.fs.ls("dbfs:/databricks/scripts/"))
 # MAGIC %md
 # MAGIC The script was saved to DBFS storage as /dbfs/databricks/scripts/selenium-install.sh 
 # MAGIC We can set it as an init script for the server. Click your cluster in "compute" -> click "Edit" -> "configuration" tab -> scroll down to "Advanced options" -> click "Init Scripts" -> select "DBFS" and set "Init script path" as "/dbfs/databricks/scripts/selenium-install.sh" -> click "add".
+# MAGIC 
+# MAGIC ![image](https://raw.githubusercontent.com/hubert-dudek/databricks-hubert/main/projects/selenium/init.png)
 
 # COMMAND ----------
 
@@ -70,6 +72,8 @@ display(dbutils.fs.ls("dbfs:/databricks/scripts/"))
 # COMMAND ----------
 
 # MAGIC %md Now we can install selenium. Click your cluster in "compute" -> click "Libraries" -> click "Install new" -> click "PyPI" -> set "Package" as "selenium" -> click "install".
+# MAGIC 
+# MAGIC ![image](https://raw.githubusercontent.com/hubert-dudek/databricks-hubert/main/projects/selenium/install_library.png)
 # MAGIC 
 # MAGIC Alternatively (which is less convenient), you can install it every time in your notebook by running the below command.
 
