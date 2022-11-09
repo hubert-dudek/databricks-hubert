@@ -1,100 +1,142 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC **Selenium chrome driver on databricks cluster**
+# MAGIC **Selenium chrome driver on databricks driver**
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC First we need to check latest version of chromedriver-binary on page https://pypi.org/project/chromedriver-binary/. In moment when I wam writing it is version 107.0. Than we need to go to our cluster in "Compute" and in "Libraries" select "Install new" and choose 
+# MAGIC On the databricks community, I see repeated problems regarding the selenium installation on the databricks driver. 
+# MAGIC Installing selenium on databricks can be surprising, but for example, sometimes we need to grab some datasets behind fancy authentication, and selenium is the most accessible tool to do that. Of course, always remember to check the most uncomplicated alternatives first. For example, if we need to download an HTML file, we can use SparkContext.addFile() or just use the requests library. If we need to parse HTML without simulating user actions or downloading complicated pages, we can use BeautifulSoap. Please remember that selenium is running on the driver only (workers are not utilized), so just for the selenium part single node cluster is the preferred setting.
+# MAGIC 
+# MAGIC **Installation**
+# MAGIC 
+# MAGIC The easiest solution is to use apt-get to install ubuntu packages, but often version in the ubuntu repo is outdated. Recently that solution stopped working for me, and I decided to take a different approach and to get the driver and binaries from chromium-browser-snapshots [https://commondatastorage.googleapis.com/chromium-browser-snapshots/index.html] Below script download the newest version of browser binaries and driver. Everything is saved to /tmp/chrome directory. We must also set the chrome home directory to /tmp/chrome/chrome-user-data-dir. Sometimes, chromium complains about missing libraries. That's why we also install libgbm-dev. The below script will create a bash file implementing mentioned steps.
 
 # COMMAND ----------
 
-100.0.4896.20/chromedriver_linux64.zip
+dbutils.fs.mkdirs("dbfs:/databricks/scripts/")
+dbutils.fs.put("/databricks/scripts/selenium-install.sh","""
+#!/bin/bash
+%sh
+LAST_VERSION="https://www.googleapis.com/download/storage/v1/b/chromium-browser-snapshots/o/Linux_x64%2FLAST_CHANGE?alt=media"
+VERSION=$(curl -s -S $LAST_VERSION)
+if [ -d $VERSION ] ; then
+  echo "version already installed"
+  exit
+fi
 
-# COMMAND ----------
+rm -rf /tmp/chrome/$VERSION
+mkdir -p /tmp/chrome/$VERSION
 
-# MAGIC %md we need to install the same version od chromium-browser as chromedriver. First we check latest version on https://chromedriver.storage.googleapis.com/ and than look for corresponing ubuntu package using search
+URL="https://www.googleapis.com/download/storage/v1/b/chromium-browser-snapshots/o/Linux_x64%2F$VERSION%2Fchrome-linux.zip?alt=media"
+ZIP="${VERSION}-chrome-linux.zip"
 
-# COMMAND ----------
+curl -# $URL > /tmp/chrome/$ZIP
+unzip /tmp/chrome/$ZIP -d /tmp/chrome/$VERSION
 
-https://chromedriver.storage.googleapis.com/
+URL="https://www.googleapis.com/download/storage/v1/b/chromium-browser-snapshots/o/Linux_x64%2F$VERSION%2Fchromedriver_linux64.zip?alt=media"
+ZIP="${VERSION}-chromedriver_linux64.zip"
 
-# COMMAND ----------
+curl -# $URL > /tmp/chrome/$ZIP
+unzip /tmp/chrome/$ZIP -d /tmp/chrome/$VERSION
 
-# MAGIC %md we will use version X and will put it to bash script which will install it. Please run bellow cell to save it in DBFS.
+mkdir -p /tmp/chrome/chrome-user-data-dir
 
-# COMMAND ----------
+rm -f /tmp/chrome/latest
+ln -s /tmp/chrome/$VERSION /tmp/chrome/latest
 
-https://pkgs.org/search/?q=chromium-browser
-
-
-
-# COMMAND ----------
-
-    dbutils.fs.mkdirs("dbfs:/databricks/scripts/")
-    dbutils.fs.put("/databricks/scripts/selenium-install.sh","""
-    #!/bin/bash
-    apt-get update
-    apt-get install chromium-browser=91.0.4472.101-0ubuntu0.18.04.1 --yes
-    wget https://chromedriver.storage.googleapis.com/91.0.4472.101/chromedriver_linux64.zip -O /tmp/chromedriver.zip
-    mkdir /tmp/chromedriver
-    unzip /tmp/chromedriver.zip -d /tmp/chromedriver/
-    """, True)
-    display(dbutils.fs.ls("dbfs:/databricks/scripts/"))
+# to avoid errors about missing libraries
+sudo apt-get update
+sudo apt-get install -y libgbm-dev
+""", True)
+display(dbutils.fs.ls("dbfs:/databricks/scripts/"))
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC Please add "/databricks/scripts/selenium-install.sh" as starting script - init in cluster config.
-# MAGIC Later in the notebook, you can use chrome, as in the below example.
+# MAGIC The script was saved to DBFS storage as /dbfs/databricks/scripts/selenium-install.sh 
+# MAGIC We can set it as an init script for the server. Click your cluster in "compute" -> click "Edit" -> "configuration" tab -> scroll down to "Advanced options" -> click "Init Scripts" -> select "DBFS" and set "Init script path" as "/dbfs/databricks/scripts/selenium-install.sh" -> click "add".
 
 # COMMAND ----------
 
-    from selenium import webdriver
-    chrome_driver = '/tmp/chromedriver/chromedriver'
-    chrome_options = webdriver.ChromeOptions()
-    chrome_options.add_argument('--no-sandbox')
-    chrome_options.add_argument('--headless')
-    # chrome_options.add_argument('--disable-dev-shm-usage') 
-    chrome_options.add_argument('--homedir=/dbfs/tmp')
-    chrome_options.add_argument('--user-data-dir=/dbfs/selenium')
-    # prefs = {"download.default_directory":"/dbfs/tmp",
-    #          "download.prompt_for_download":False
-    # }
-    # chrome_options.add_experimental_option("prefs",prefs)
-    driver = webdriver.Chrome(executable_path=chrome_driver, options=chrome_options)
+# MAGIC %md
+# MAGIC If you haven't set the init script, please run the below command.
 
 # COMMAND ----------
 
-from selenium.webdriver.common.keys import Keys
+# MAGIC %sh
+# MAGIC /dbfs/databricks/scripts/selenium-install.sh
+
+# COMMAND ----------
+
+# MAGIC %md Now we can install selenium. Click your cluster in "compute" -> click "Libraries" -> click "Install new" -> click "PyPI" -> set "Package" as "selenium" -> click "install".
+# MAGIC 
+# MAGIC Alternatively (which is less convenient), you can install it every time in your notebook by running the below command.
+
+# COMMAND ----------
+
+# MAGIC %pip install selenium
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC So let's start webdriver. We can see that Service and binary_location point to driver and binaries, which were downloaded and unpacked by our script.
+
+# COMMAND ----------
+
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+s = Service('/tmp/chrome/latest/chromedriver_linux64/chromedriver')
+options = webdriver.ChromeOptions()
+options.binary_location = "/tmp/chrome/latest/chrome-linux/chrome"
+options.add_argument('headless')
+options.add_argument('--disable-infobars')
+options.add_argument('--disable-dev-shm-usage')
+options.add_argument('--no-sandbox')
+options.add_argument('--remote-debugging-port=9222')
+options.add_argument('--homedir=/tmp/chrome/chrome-user-data-dir')
+options.add_argument('--user-data-dir=/tmp/chrome/chrome-user-data-dir')
+prefs = {"download.default_directory":"/tmp/chrome/chrome-user-data-di",
+         "download.prompt_for_download":False
+}
+options.add_experimental_option("prefs",prefs)
+driver = webdriver.Chrome(service=s, options=options)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC Let's test webdriver. We will take the last posts from the databricks community and convert them to a dataframe.
+
+# COMMAND ----------
+
 from selenium.webdriver.common.by import By
-
-driver = webdriver.Firefox()
-driver.get("http://www.python.org")
-assert "Python" in driver.title
-elem = driver.find_element(By.NAME, "q")
-elem.clear()
-elem.send_keys("pycon")
-elem.send_keys(Keys.RETURN)
-assert "No results found." not in driver.page_source
-driver.close()
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+driver.execute("get", {'url': 'https://community.databricks.com/s/discussions?page=1&filter=All'})
+date = [elem.text for elem in WebDriverWait(driver, 20).until(EC.visibility_of_all_elements_located((By.CSS_SELECTOR, "lightning-formatted-date-time")))]
+title = [elem.text for elem in WebDriverWait(driver, 20).until(EC.visibility_of_all_elements_located((By.CSS_SELECTOR, "p[class='Sub-heaading1']")))]
 
 # COMMAND ----------
 
+from pyspark.sql.types import StringType, StructType, StructField
 
-
-# COMMAND ----------
-
-driver.execute("get", {'url': 'https://www.booking.com/searchresults.en-gb.html?ss=Prague%2C+Czech+Republic&efdco=1&label=gen173nr-1BCAEoggI46AdIM1gEaDqIAQGYAQm4ARfIAQzYAQHoAQGIAgGoAgO4ArGQiZsGwAIB0gIkMDhlNzY3NTctMDFlNi00Mzg2LTljYWItMDRkNzVmZjk1NzAx2AIF4AIB&sid=118868bec0fcfe0afc53985fa9ba52e3&aid=304142&lang=en-gb&sb=1&src_elem=sb&src=searchresults&checkin=2022-12-01&checkout=2022-12-01&group_adults=2&no_rooms=1&group_children=0&sb_travel_purpose=leisure'})
-hotels = [elem.text for elem in WebDriverWait(driver, 20).until(EC.visibility_of_all_elements_located((By.CSS_SELECTOR, "div[data-testid='title']")))]
-prices = [elem.text for elem in WebDriverWait(driver, 20).until(EC.visibility_of_all_elements_located((By.CSS_SELECTOR, "div[data-testid='price-and-discounted-price'] > span")))]
-schema = StructType(
-    [StructField("hotels", StringType()),
-     StructField("prices", StringType())])
-df = spark.createDataFrame([hotels, prices],schema=Schema)
+schema = StructType([
+    StructField("date", StringType()),
+    StructField("title", StringType())
+])
+df = spark.createDataFrame(list(zip(date, title)), schema=schema)
 display(df)
 
 # COMMAND ----------
 
-Alternative solution: if we just need to download html file we can use SparkContext.addFile() or just use requests
-iF WE need just to parse html without simulating user actions (like clicks, mouse moves) it is ismple to use BeautifulSoap
+# MAGIC %md
+# MAGIC We can see the latest posts in our dataframe. Now we can quit the driver.
+
+# COMMAND ----------
+
+driver.quit()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC The version of that article as ready to run notebook is available at:
